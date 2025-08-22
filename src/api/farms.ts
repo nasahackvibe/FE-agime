@@ -1,17 +1,19 @@
 import { apiClient } from './client';
 
 export interface Farm {
-  id: number;
+  id: string;
   name: string;
-  coordinates: number[][];
+  centroid: {
+    lat: number;
+    lon: number;
+  };
+  area_m2: number;
   created_at: string;
-  updated_at: string;
-  owner: number;
 }
 
 export interface CreateFarmRequest {
   name: string;
-  coordinates: number[][];
+  coords: number[][];
 }
 
 export interface Analysis {
@@ -32,27 +34,27 @@ export const farmApi = {
     return apiClient.request<Farm>('POST', '/farms/', farmData);
   },
 
-  async getFarm(id: number): Promise<Farm> {
+  async getFarm(id: string): Promise<Farm> {
     return apiClient.request<Farm>('GET', `/farms/${id}/`);
   },
 
-  async updateFarm(id: number, farmData: Partial<CreateFarmRequest>): Promise<Farm> {
+  async updateFarm(id: string, farmData: Partial<CreateFarmRequest>): Promise<Farm> {
     return apiClient.request<Farm>('PUT', `/farms/${id}/`, farmData);
   },
 
-  async deleteFarm(id: number): Promise<void> {
+  async deleteFarm(id: string): Promise<void> {
     return apiClient.request<void>('DELETE', `/farms/${id}/`);
   },
 
-  async analyzeFarm(id: number): Promise<Analysis> {
+  async analyzeFarm(id: string): Promise<Analysis> {
     return apiClient.request<Analysis>('POST', `/farms/${id}/analyze/`);
   },
 
-  async getLatestAnalysis(id: number): Promise<Analysis> {
+  async getLatestAnalysis(id: string): Promise<Analysis> {
     return apiClient.request<Analysis>('GET', `/farms/${id}/latest-analysis/`);
   },
 
-  async getAnalyses(id: number): Promise<Analysis[]> {
+  async getAnalyses(id: string): Promise<Analysis[]> {
     return apiClient.request<Analysis[]>('GET', `/farms/${id}/analyses/`);
   },
 };

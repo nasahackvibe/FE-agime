@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { farmApi } from '../api/farms';
 import type { Farm } from '../api/farms';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { useToast } from '../components/ui/toast';
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const [farms, setFarms] = useState<Farm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +20,14 @@ export const Dashboard: React.FC = () => {
       try {
         const farmsData = await farmApi.getFarms();
         setFarms(farmsData);
+        
+        // If no farms are returned, redirect to map with a message
+        if (farmsData.length === 0) {
+          showToast('No farms found. Please create your first farm to get started!', 'info');
+          setTimeout(() => {
+            navigate('/map');
+          }, 2000); // Give user time to read the message
+        }
       } catch (err) {
         setError('Failed to load farms');
         console.error('Error loading farms:', err);
@@ -26,7 +37,7 @@ export const Dashboard: React.FC = () => {
     };
 
     loadFarms();
-  }, []);
+  }, [navigate, showToast]);
 
   const handleLogout = () => {
     logout();
@@ -100,12 +111,13 @@ export const Dashboard: React.FC = () => {
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="text-lg font-medium text-gray-900">{farm.name}</h4>
                         <span className="text-sm text-gray-500">
-                          #{farm.id}
+                          {farm.area_m2.toFixed(2)} m²
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Created: {new Date(farm.created_at).toLocaleDateString()}
-                      </p>
+                      <div className="text-sm text-gray-600 mb-2">
+                        <p>Centroid: {farm.centroid.lat.toFixed(4)}, {farm.centroid.lon.toFixed(4)}</p>
+                        <p>Created: {new Date(farm.created_at).toLocaleDateString()}</p>
+                      </div>
                       <div className="flex space-x-2">
                         <Link to={`/analysis/${farm.id}`}>
                           <Button size="sm" variant="outline">
@@ -117,9 +129,10 @@ export const Dashboard: React.FC = () => {
                           onClick={async () => {
                             try {
                               await farmApi.analyzeFarm(farm.id);
-                              // Could add a toast notification here
+                              showToast('Farm analysis started successfully!', 'success');
                             } catch (err) {
                               console.error('Analysis failed:', err);
+                              showToast('Failed to start farm analysis', 'error');
                             }
                           }}
                         >

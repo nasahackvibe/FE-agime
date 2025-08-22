@@ -19,12 +19,10 @@ export const AnalysisPage: React.FC = () => {
       if (!farm_id) return;
 
       try {
-        const farmId = parseInt(farm_id, 10);
-        
         // Load farm details and analyses in parallel
         const [farmData, analysesData] = await Promise.all([
-          farmApi.getFarm(farmId),
-          farmApi.getAnalyses(farmId),
+          farmApi.getFarm(farm_id),
+          farmApi.getAnalyses(farm_id),
         ]);
 
         setFarm(farmData);
@@ -53,8 +51,7 @@ export const AnalysisPage: React.FC = () => {
 
     setAnalyzing(true);
     try {
-      const farmId = parseInt(farm_id, 10);
-      const newAnalysis = await farmApi.analyzeFarm(farmId);
+      const newAnalysis = await farmApi.analyzeFarm(farm_id);
       setAnalyses([newAnalysis, ...analyses]);
       setLatestAnalysis(newAnalysis);
     } catch (err) {

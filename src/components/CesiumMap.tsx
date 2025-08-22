@@ -14,11 +14,8 @@ import {
   ColorMaterialProperty,
   Entity
 } from 'cesium';
-import { farmApi } from '../api/farms';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Card } from './ui/card';
+import { FarmCreationDialog } from './FarmCreationDialog';
+import { Toast } from './ui/toast';
 
 // Set your Cesium Ion access token
 Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZmM0MGZmMi1mM2E2LTQ0MmEtYjE4ZS1jMjFhOGEyYzMzZWUiLCJpZCI6MzM0NDM3LCJpYXQiOjE3NTU4NTkyOTF9.psLMJyO3td3N9F564Pgf5D_-USXQgKAT2vExPjxSpUs";
@@ -40,9 +37,11 @@ function CesiumMap() {
   // Farm creation states
   const [showFarmDialog, setShowFarmDialog] = useState(false);
   const [pendingPolygon, setPendingPolygon] = useState<Array<{lat: number, lon: number}> | null>(null);
-  const [farmName, setFarmName] = useState('');
-  const [isCreatingFarm, setIsCreatingFarm] = useState(false);
-  const [farmError, setFarmError] = useState<string | null>(null);
+  const [showConfirmationPopup, setShowConfirmationPopup] = useState(false);
+  const [tempCoordinates, setTempCoordinates] = useState<Array<{lat: number, lon: number}>>([]);
+  
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Function to order points to create a simple (non-self-intersecting) polygon
   const orderPointsForSimplePolygon = (points: Cartesian3[]) => {
@@ -152,7 +151,7 @@ function CesiumMap() {
     const orderedPoints = orderPointsForSimplePolygon(polygonPoints);
 
     // Create the final filled polygon
-    const polygonEntity = viewer.entities.add({
+    viewer.entities.add({
       polygon: {
         hierarchy: new PolygonHierarchy(orderedPoints),
         // Use ColorMaterialProperty for consistent solid fill
@@ -178,8 +177,9 @@ function CesiumMap() {
     // Convert points to coordinates
     const coordinates = polygonPoints.map(cartesianToCoordinates);
     
-    // Save completed polygon
-    setCompletedPolygons(prev => [...prev, { points: polygonPoints, coordinates }]);
+    // Show confirmation popup
+    setTempCoordinates(coordinates);
+    setShowConfirmationPopup(true);
     
     // Log coordinates to console
     console.log('Polygon completed with coordinates:', coordinates);
@@ -200,6 +200,56 @@ function CesiumMap() {
       handlerRef.current.destroy();
       handlerRef.current = null;
     }
+  };
+
+  // Function to confirm polygon and open farm creation dialog
+  const confirmPolygon = () => {
+    // Save completed polygon to state
+    setCompletedPolygons(prev => [...prev, { points: [], coordinates: tempCoordinates }]);
+    
+    // Set pending polygon for farm creation
+    setPendingPolygon(tempCoordinates);
+    
+    // Close confirmation popup and open farm dialog
+    setShowConfirmationPopup(false);
+    setShowFarmDialog(true);
+  };
+
+  // Function to cancel polygon confirmation
+  const cancelPolygonConfirmation = () => {
+    const viewer = cesiumViewerRef.current;
+    if (!viewer) return;
+    
+    // Remove the last added polygon entity
+    const entities = viewer.entities.values;
+    if (entities.length > 0) {
+      const lastEntity = entities[entities.length - 1];
+      if (lastEntity.polygon) {
+        viewer.entities.remove(lastEntity);
+      }
+    }
+    
+    // Clear temp coordinates and close popup
+    setTempCoordinates([]);
+    setShowConfirmationPopup(false);
+  };
+
+  // Function to handle successful farm creation
+  const handleFarmCreated = (farm: any) => {
+    console.log('Farm created successfully:', farm);
+    setPendingPolygon(null);
+    setToast({
+      message: `Farm "${farm.name}" created successfully!`,
+      type: 'success'
+    });
+  };
+
+  // Function to handle farm creation errors
+  const handleFarmError = (error: string) => {
+    setToast({
+      message: error,
+      type: 'error'
+    });
   };
 
   // Function to cancel current polygon drawing
@@ -493,6 +543,85 @@ function CesiumMap() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Polygon Confirmation Popup */}
+      {showConfirmationPopup && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 1000,
+          backgroundColor: "white",
+          padding: "20px",
+          borderRadius: "8px",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+          maxWidth: "400px",
+          width: "90%"
+        }}>
+          <h3 style={{ margin: "0 0 12px 0", color: "#333" }}>Confirm Farm Boundary</h3>
+          <p style={{ margin: "0 0 16px 0", color: "#666", fontSize: "14px" }}>
+            You've drawn a farm boundary with {tempCoordinates.length} points. 
+            Would you like to create a farm with this boundary?
+          </p>
+          <div style={{
+            display: "flex",
+            gap: "12px",
+            justifyContent: "flex-end"
+          }}>
+            <button
+              onClick={cancelPolygonConfirmation}
+              style={{
+                backgroundColor: "#6c757d",
+                color: "white",
+                border: "none",
+                padding: "8px 16px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500"
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmPolygon}
+              style={{
+                backgroundColor: "#007bff",
+                color: "white",
+                border: "none",
+                padding: "8px 16px",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500"
+              }}
+            >
+              Create Farm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Farm Creation Dialog */}
+      {pendingPolygon && (
+        <FarmCreationDialog
+          open={showFarmDialog}
+          onOpenChange={setShowFarmDialog}
+          coordinates={pendingPolygon}
+          onFarmCreated={handleFarmCreated}
+          onError={handleFarmError}
+        />
+      )}
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );
