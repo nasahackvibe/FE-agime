@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Viewer,
   Ion,
@@ -13,6 +14,11 @@ import {
   ColorMaterialProperty,
   Entity
 } from 'cesium';
+import { farmApi } from '../api/farms';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card } from './ui/card';
 
 // Set your Cesium Ion access token
 Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZmM0MGZmMi1mM2E2LTQ0MmEtYjE4ZS1jMjFhOGEyYzMzZWUiLCJpZCI6MzM0NDM3LCJpYXQiOjE3NTU4NTkyOTF9.psLMJyO3td3N9F564Pgf5D_-USXQgKAT2vExPjxSpUs";
@@ -20,6 +26,7 @@ Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI2ZmM0M
 function CesiumMap() {
   const viewerRef = useRef<HTMLDivElement>(null);
   const cesiumViewerRef = useRef<Viewer | null>(null);
+  const navigate = useNavigate();
   const [isLocating, setIsLocating] = useState(false);
   
   // Polygon drawing states
@@ -29,6 +36,13 @@ function CesiumMap() {
   const [currentPolygonEntity, setCurrentPolygonEntity] = useState<Entity | null>(null);
   const pointEntitiesRef = useRef<Entity[]>([]);
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
+  
+  // Farm creation states
+  const [showFarmDialog, setShowFarmDialog] = useState(false);
+  const [pendingPolygon, setPendingPolygon] = useState<Array<{lat: number, lon: number}> | null>(null);
+  const [farmName, setFarmName] = useState('');
+  const [isCreatingFarm, setIsCreatingFarm] = useState(false);
+  const [farmError, setFarmError] = useState<string | null>(null);
 
   // Function to order points to create a simple (non-self-intersecting) polygon
   const orderPointsForSimplePolygon = (points: Cartesian3[]) => {

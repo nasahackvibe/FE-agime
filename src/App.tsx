@@ -1,34 +1,47 @@
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
-import Navigation from '@/components/Navigation'
-import HomePage from '@/pages/HomePage'
-import MapPage from '@/pages/MapPage'
-import LoginPage from '@/pages/LoginPage'
-import SignupPage from '@/pages/SignupPage'
-import './App.css'
-
-function AppContent() {
-  const location = useLocation()
-  const showNavigation = location.pathname !== '/map'
-
-  return (
-    <div className={showNavigation ? "min-h-screen" : ""}>
-      {showNavigation && <Navigation />}
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
-      </Routes>
-    </div>
-  )
-}
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AuthPage } from './pages/AuthPage';
+import { Dashboard } from './pages/Dashboard';
+import MapPage from './pages/MapPage';
+import { AnalysisPage } from './pages/AnalysisPage';
+import './App.css';
 
 function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
-  )
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen">
+          <Routes>
+            {/* Public route */}
+            <Route path="/auth" element={<AuthPage />} />
+            
+            {/* Protected routes */}
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/map" element={
+              <ProtectedRoute>
+                <MapPage />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/analysis/:farm_id" element={
+              <ProtectedRoute>
+                <AnalysisPage />
+              </ProtectedRoute>
+            } />
+            
+            {/* Catch all route - redirect to dashboard */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
+  );
 }
 
-export default App
+export default App;
