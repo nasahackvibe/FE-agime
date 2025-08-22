@@ -8,9 +8,10 @@ import {
   defined,
   Color,
   Entity,
-  PolygonHierarchy,
   Cartographic,
-  Math as CesiumMath
+  Math as CesiumMath,
+  ColorMaterialProperty,
+  PolygonHierarchy
 } from "cesium";
 
 function App() {
@@ -28,7 +29,35 @@ function App() {
   const pointEntitiesRef = useRef<Entity[]>([]);
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
 
-  // Function to convert Cartesian3 to lat/lon coordinates
+  // Function to order points to create a simple (non-self-intersecting) polygon
+  const orderPointsForSimplePolygon = (points: Cartesian3[]) => {
+    if (points.length <= 3) return points;
+    
+    // Convert to 2D coordinates for easier calculation
+    const points2D = points.map(point => {
+      const cartographic = Cartographic.fromCartesian(point);
+      return {
+        x: CesiumMath.toDegrees(cartographic.longitude),
+        y: CesiumMath.toDegrees(cartographic.latitude),
+        original: point
+      };
+    });
+    
+    // Find centroid
+    const centroid = {
+      x: points2D.reduce((sum, p) => sum + p.x, 0) / points2D.length,
+      y: points2D.reduce((sum, p) => sum + p.y, 0) / points2D.length
+    };
+    
+    // Sort points by angle from centroid to create a simple polygon
+    const sortedPoints = points2D.sort((a, b) => {
+      const angleA = Math.atan2(a.y - centroid.y, a.x - centroid.x);
+      const angleB = Math.atan2(b.y - centroid.y, b.x - centroid.x);
+      return angleA - angleB;
+    });
+    
+    return sortedPoints.map(p => p.original);
+  };
   const cartesianToCoordinates = (cartesian: Cartesian3) => {
     const cartographic = Cartographic.fromCartesian(cartesian);
     return {
@@ -50,11 +79,8 @@ function App() {
     });
     pointEntitiesRef.current = [];
     
-    // Remove current polygon if exists
-    if (currentPolygonEntity) {
-      cesiumViewerRef.current.entities.remove(currentPolygonEntity);
-      setCurrentPolygonEntity(null);
-    }
+    // No need to remove polygon entity since we don't create them during drawing
+    setCurrentPolygonEntity(null);
 
     // Create click handler for adding points
     if (handlerRef.current) {
@@ -88,31 +114,8 @@ function App() {
       setPolygonPoints(prev => {
         const newPoints = [...prev, pickedPosition];
         
-        // Create or update polygon if we have at least 3 points
-        if (newPoints.length >= 3) {
-          // Remove existing polygon to avoid visual artifacts
-          if (currentPolygonEntity) {
-            viewer.entities.remove(currentPolygonEntity);
-          }
-          
-          // Create new polygon with consistent styling
-          const polygonEntity = viewer.entities.add({
-            polygon: {
-              hierarchy: new PolygonHierarchy(newPoints),
-              material: Color.BLUE.withAlpha(0.3),
-              outline: true,
-              outlineColor: Color.BLUE,
-              outlineWidth: 2,
-              height: 0,
-              extrudedHeight: 0,
-              // Ensure consistent rendering
-              fill: true,
-              show: true
-            }
-          });
-          
-          setCurrentPolygonEntity(polygonEntity);
-        }
+        // Don't create polygon during drawing - only show points
+        // The polygon will be created only when user clicks "Complete"
         
         return newPoints;
       });
@@ -125,6 +128,36 @@ function App() {
       alert('Please select at least 3 points to complete a polygon');
       return;
     }
+
+    const viewer = cesiumViewerRef.current;
+    if (!viewer) return;
+
+    // Order points to prevent self-intersection and overlapping
+    const orderedPoints = orderPointsForSimplePolygon(polygonPoints);
+
+    // Create the final filled polygon
+    const polygonEntity = viewer.entities.add({
+      polygon: {
+        hierarchy: new PolygonHierarchy(orderedPoints),
+        // Use ColorMaterialProperty for consistent solid fill
+        material: new ColorMaterialProperty(Color.BLUE.withAlpha(0.4)),
+        outline: true,
+        outlineColor: Color.DARKBLUE,
+        outlineWidth: 2,
+        height: 0,
+        // Critical: Disable all properties that might cause triangulation artifacts
+        extrudedHeight: undefined,
+        perPositionHeight: false,
+        closeTop: false,
+        closeBottom: false,
+        // Disable shadows and classification that can cause visual artifacts
+        shadows: 0,
+        classificationType: undefined,
+        // Ensure consistent fill
+        fill: true,
+        show: true
+      }
+    });
 
     // Convert points to coordinates
     const coordinates = polygonPoints.map(cartesianToCoordinates);
@@ -140,9 +173,9 @@ function App() {
     setPolygonPoints([]);
     setCurrentPolygonEntity(null);
     
-    // Clear point markers
+    // Clear point markers (they're no longer needed since we have the filled polygon)
     pointEntitiesRef.current.forEach(entity => {
-      cesiumViewerRef.current?.entities.remove(entity);
+      viewer.entities.remove(entity);
     });
     pointEntitiesRef.current = [];
     
@@ -160,11 +193,8 @@ function App() {
     setIsDrawingMode(false);
     setPolygonPoints([]);
     
-    // Remove current polygon
-    if (currentPolygonEntity) {
-      cesiumViewerRef.current.entities.remove(currentPolygonEntity);
-      setCurrentPolygonEntity(null);
-    }
+    // Since we don't create polygons during drawing, no need to remove currentPolygonEntity
+    setCurrentPolygonEntity(null);
     
     // Clear point markers
     pointEntitiesRef.current.forEach(entity => {
@@ -347,9 +377,11 @@ function App() {
               fontSize: "12px",
               textAlign: "center"
             }}>
-              Click points to draw polygon
+              Click points to mark vertices
               <br />
               Points: {polygonPoints.length}
+              <br />
+              <small>Polygon will appear when completed</small>
             </div>
             
             <button 
