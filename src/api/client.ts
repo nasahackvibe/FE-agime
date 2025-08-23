@@ -29,6 +29,25 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface ChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  farm_id?: string;
+  created_at: string;
+}
+
+export interface ChatResponse {
+  conversation_id: string;
+  assistant: string;
+  message_id: number;
+}
+
+export interface ConversationHistory {
+  conversation_id: string;
+  messages: ChatMessage[];
+}
+
 class ApiClient {
   private client: AxiosInstance;
 
@@ -116,7 +135,7 @@ class ApiClient {
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
     const response: AxiosResponse<AuthResponse> = await this.client.post('/auth/register/', userData);
-    this.setTokens(response.data.access, response.data.refresh);
+    // Don't automatically set tokens - let the caller decide
     return response.data;
   }
 
@@ -148,6 +167,21 @@ class ApiClient {
       url,
       data,
     });
+    return response.data;
+  }
+
+  // Chatbot API methods
+  async sendChatMessage(message: string, farmId?: string, conversationId?: string): Promise<ChatResponse> {
+    const response: AxiosResponse<ChatResponse> = await this.client.post('/chat/', {
+      message,
+      farm_id: farmId,
+      conversation_id: conversationId,
+    });
+    return response.data;
+  }
+
+  async getConversationHistory(conversationId: string): Promise<ConversationHistory> {
+    const response: AxiosResponse<ConversationHistory> = await this.client.get(`/chat/conversations/${conversationId}/messages/`);
     return response.data;
   }
 }

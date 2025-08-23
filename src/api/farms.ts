@@ -19,9 +19,40 @@ export interface CreateFarmRequest {
 export interface Analysis {
   id: number;
   farm: number;
-  results: any;
+  raw_llm_response?: {
+    centroid?: {
+      lat: number;
+      lon: number;
+    };
+    weather_summary?: {
+      current: {
+        temp_c: number;
+        precip_mm: number;
+        condition: string;
+      };
+      next_7_days: Array<{
+        date: string;
+        precip_mm: number;
+      }>;
+    };
+    soil_summary?: {
+      ph: number;
+      texture: string;
+      notes: string;
+    };
+    recommended_crops?: Array<{
+      name: string;
+      score: number;
+      reason: string;
+    }>;
+    weekly_plan_template?: {
+      [cropName: string]: {
+        [week: string]: string[];
+      };
+    };
+  };
   created_at: string;
-  status: 'pending' | 'completed' | 'failed';
+  status?: 'pending' | 'completed' | 'failed';
 }
 
 // Farm operations

@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiClient } from '../api/client';
-import type { User, LoginRequest, RegisterRequest } from '../api/client';
+import type { User, LoginRequest, RegisterRequest, AuthResponse } from '../api/client';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
-  register: (userData: RegisterRequest) => Promise<void>;
+  register: (userData: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -65,7 +65,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       const response = await apiClient.register(userData);
-      setUser(response.user);
+      // Don't automatically set user - registration should redirect to login
+      return response;
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;

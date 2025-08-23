@@ -17,6 +17,7 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [showAnalysisResults, setShowAnalysisResults] = useState(false);
+  const [hasProcessedAnalysis, setHasProcessedAnalysis] = useState(false);
 
   // Check if we have navigation state from map page
   const navigationState = location.state as {
@@ -32,10 +33,16 @@ export const Dashboard: React.FC = () => {
         const farmsData = await farmApi.getFarms();
         setFarms(farmsData);
         
-        // If we have navigation state with analysis flag, start analysis
-        if (navigationState?.showAnalysis && navigationState?.farmId) {
+        // If we have navigation state with analysis flag and haven't processed it yet, start analysis
+        if (navigationState?.showAnalysis && navigationState?.farmId && !hasProcessedAnalysis) {
           console.log('🚀 [DEBUG] Starting analysis from dashboard...');
           console.log('📋 [DEBUG] Farm data from navigation:', navigationState);
+          
+          // Mark as processed to prevent multiple calls
+          setHasProcessedAnalysis(true);
+          
+          // Clear navigation state immediately to prevent re-processing
+          window.history.replaceState({}, document.title);
           
           // Start the analysis
           await startAnalysis(navigationState.farmId);
@@ -57,7 +64,9 @@ export const Dashboard: React.FC = () => {
     };
 
     loadFarms();
-  }, [navigate, showToast, navigationState]);
+  }, [navigate, showToast, navigationState, hasProcessedAnalysis]);
+
+
 
   // Function to start analysis and display results
   const startAnalysis = async (farmId: string) => {
@@ -66,10 +75,19 @@ export const Dashboard: React.FC = () => {
       const analysis = await farmApi.analyzeFarm(farmId);
       console.log('✅ [DEBUG] Analysis completed:', analysis);
       
-      setAnalysisData(analysis.results);
+      // Store the full analysis object to access creation time
+      setAnalysisData({
+        ...analysis.results,
+        created_at: analysis.created_at
+      });
       setShowAnalysisResults(true);
       
-      showToast('Farm analysis completed successfully!', 'success');
+      // Only show success toast if we have results
+      if (analysis.results) {
+        showToast('Farm analysis completed successfully!', 'success');
+      } else {
+        showToast('Analysis started successfully!', 'info');
+      }
     } catch (err) {
       console.error('❌ [DEBUG] Analysis failed:', err);
       showToast('Failed to run farm analysis', 'error');
@@ -191,45 +209,64 @@ export const Dashboard: React.FC = () => {
                   <h3 className="text-lg leading-6 font-medium text-gray-900">
                     🌱 Farm Analysis Results
                   </h3>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setShowAnalysisResults(false)}
-                  >
-                    Close
-                  </Button>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm text-gray-500">
+                      Last analyzed: {analysisData?.created_at ? new Date(analysisData.created_at).toLocaleString() : new Date().toLocaleString()}
+                    </span>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setShowAnalysisResults(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="bg-gray-50 rounded-lg p-4 border">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-md font-medium text-gray-900">
-                      Analysis Data (JSON)
+                  <div className="mb-4">
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                      Analysis Summary
                     </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="bg-white rounded p-3">
+                        <h5 className="font-medium text-blue-800 mb-2">Weather Data</h5>
+                        <p className="text-sm text-gray-600">Current conditions and 7-day forecast available</p>
+                      </div>
+                      <div className="bg-white rounded p-3">
+                        <h5 className="font-medium text-green-800 mb-2">Soil Analysis</h5>
+                        <p className="text-sm text-gray-600">pH levels, texture, and soil characteristics</p>
+                      </div>
+                      <div className="bg-white rounded p-3">
+                        <h5 className="font-medium text-yellow-800 mb-2">Crop Recommendations</h5>
+                        <p className="text-sm text-gray-600">Best crops with match scores and reasons</p>
+                      </div>
+                      <div className="bg-white rounded p-3">
+                        <h5 className="font-medium text-purple-800 mb-2">Farming Plan</h5>
+                        <p className="text-sm text-gray-600">Weekly farming schedule template</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      <p><strong>Analysis includes:</strong></p>
+                      <ul className="list-disc list-inside mt-2 space-y-1">
+                        <li>Weather summary and forecast</li>
+                        <li>Soil analysis and characteristics</li>
+                        <li>Recommended crops with match scores</li>
+                        <li>Weekly farming plan template</li>
+                      </ul>
+                    </div>
                     <Button 
                       size="sm"
                       onClick={() => {
                         navigator.clipboard.writeText(JSON.stringify(analysisData, null, 2));
-                        showToast('JSON copied to clipboard!', 'success');
+                        showToast('Analysis data copied to clipboard!', 'success');
                       }}
                     >
-                      Copy JSON
+                      Copy Data
                     </Button>
-                  </div>
-                  
-                  <div className="bg-white rounded border p-4 max-h-96 overflow-auto">
-                    <pre className="text-sm text-gray-800 whitespace-pre-wrap">
-                      {JSON.stringify(analysisData, null, 2)}
-                    </pre>
-                  </div>
-                  
-                  <div className="mt-4 text-sm text-gray-600">
-                    <p><strong>Analysis includes:</strong></p>
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>Weather summary and forecast</li>
-                      <li>Soil analysis and characteristics</li>
-                      <li>Recommended crops with match scores</li>
-                      <li>Weekly farming plan template</li>
-                    </ul>
                   </div>
                 </div>
               </div>

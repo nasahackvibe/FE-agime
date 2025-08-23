@@ -20,6 +20,7 @@ export const AuthPage: React.FC = () => {
     language: 'en',
   });
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
@@ -32,8 +33,9 @@ export const AuthPage: React.FC = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    // Clear error when user starts typing
+    // Clear error and success when user starts typing
     if (error) setError(null);
+    if (success) setSuccess(null);
   };
 
   const validateForm = (): boolean => {
@@ -67,6 +69,7 @@ export const AuthPage: React.FC = () => {
 
     setIsSubmitting(true);
     setError(null);
+    setSuccess(null);
 
     try {
       if (mode === 'login') {
@@ -82,6 +85,18 @@ export const AuthPage: React.FC = () => {
           password_confirm: formData.password_confirm,
           phone: formData.phone,
           language: formData.language,
+        });
+        
+        // Registration successful - switch to login mode and show success message
+        setSuccess('Registration successful! Please sign in with your credentials.');
+        setMode('login');
+        setFormData({
+          username: formData.username, // Keep username for convenience
+          email: '',
+          password: '',
+          password_confirm: '',
+          phone: '',
+          language: 'en',
         });
       }
     } catch (err: any) {
@@ -131,6 +146,12 @@ export const AuthPage: React.FC = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-md p-4">
                 <p className="text-red-800 text-sm">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                <p className="text-green-800 text-sm">{success}</p>
               </div>
             )}
 
