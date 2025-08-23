@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { farmApi } from '../api/farms';
 import type { Farm } from '../api/farms';
@@ -10,16 +10,36 @@ import { useToast } from '../components/ui/toast';
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [farms, setFarms] = useState<Farm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [showAnalysisResults, setShowAnalysisResults] = useState(false);
+
+  // Check if we have navigation state from map page
+  const navigationState = location.state as {
+    farmName?: string;
+    farmId?: string;
+    coordinates?: Array<{lat: number, lon: number}>;
+    showAnalysis?: boolean;
+  } | null;
 
   useEffect(() => {
     const loadFarms = async () => {
       try {
         const farmsData = await farmApi.getFarms();
         setFarms(farmsData);
+        
+        // If we have navigation state with analysis flag, start analysis
+        if (navigationState?.showAnalysis && navigationState?.farmId) {
+          console.log('🚀 [DEBUG] Starting analysis from dashboard...');
+          console.log('📋 [DEBUG] Farm data from navigation:', navigationState);
+          
+          // Start the analysis
+          await startAnalysis(navigationState.farmId);
+        }
         
         // If no farms are returned, redirect to map with a message
         if (farmsData.length === 0) {
@@ -37,7 +57,24 @@ export const Dashboard: React.FC = () => {
     };
 
     loadFarms();
-  }, [navigate, showToast]);
+  }, [navigate, showToast, navigationState]);
+
+  // Function to start analysis and display results
+  const startAnalysis = async (farmId: string) => {
+    try {
+      console.log('🔍 [DEBUG] Running analysis for farm:', farmId);
+      const analysis = await farmApi.analyzeFarm(farmId);
+      console.log('✅ [DEBUG] Analysis completed:', analysis);
+      
+      setAnalysisData(analysis.results);
+      setShowAnalysisResults(true);
+      
+      showToast('Farm analysis completed successfully!', 'success');
+    } catch (err) {
+      console.error('❌ [DEBUG] Analysis failed:', err);
+      showToast('Failed to run farm analysis', 'error');
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -145,6 +182,59 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* Analysis Results */}
+          {showAnalysisResults && analysisData && (
+            <div className="mt-8 bg-white shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    🌱 Farm Analysis Results
+                  </h3>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowAnalysisResults(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-4 border">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-md font-medium text-gray-900">
+                      Analysis Data (JSON)
+                    </h4>
+                    <Button 
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(analysisData, null, 2));
+                        showToast('JSON copied to clipboard!', 'success');
+                      }}
+                    >
+                      Copy JSON
+                    </Button>
+                  </div>
+                  
+                  <div className="bg-white rounded border p-4 max-h-96 overflow-auto">
+                    <pre className="text-sm text-gray-800 whitespace-pre-wrap">
+                      {JSON.stringify(analysisData, null, 2)}
+                    </pre>
+                  </div>
+                  
+                  <div className="mt-4 text-sm text-gray-600">
+                    <p><strong>Analysis includes:</strong></p>
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>Weather summary and forecast</li>
+                      <li>Soil analysis and characteristics</li>
+                      <li>Recommended crops with match scores</li>
+                      <li>Weekly farming plan template</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

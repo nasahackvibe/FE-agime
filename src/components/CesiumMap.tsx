@@ -30,7 +30,6 @@ function CesiumMap() {
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [polygonPoints, setPolygonPoints] = useState<Cartesian3[]>([]);
   const [completedPolygons, setCompletedPolygons] = useState<Array<{points: Cartesian3[], coordinates: Array<{lat: number, lon: number}>}>>([]);
-  const [currentPolygonEntity, setCurrentPolygonEntity] = useState<Entity | null>(null);
   const pointEntitiesRef = useRef<Entity[]>([]);
   const handlerRef = useRef<ScreenSpaceEventHandler | null>(null);
   
@@ -39,6 +38,12 @@ function CesiumMap() {
   const [pendingPolygon, setPendingPolygon] = useState<Array<{lat: number, lon: number}> | null>(null);
   const [showConfirmationPopup, setShowConfirmationPopup] = useState(false);
   const [tempCoordinates, setTempCoordinates] = useState<Array<{lat: number, lon: number}>>([]);
+  
+  // Analysis states
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentFarmName, setCurrentFarmName] = useState('');
+  const [showAnalyzeButton, setShowAnalyzeButton] = useState(false);
+  const [currentFarmId, setCurrentFarmId] = useState<string>('');
   
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -93,9 +98,6 @@ function CesiumMap() {
       cesiumViewerRef.current?.entities.remove(entity);
     });
     pointEntitiesRef.current = [];
-    
-    // No need to remove polygon entity since we don't create them during drawing
-    setCurrentPolygonEntity(null);
 
     // Create click handler for adding points
     if (handlerRef.current) {
@@ -187,7 +189,6 @@ function CesiumMap() {
     // Reset drawing state
     setIsDrawingMode(false);
     setPolygonPoints([]);
-    setCurrentPolygonEntity(null);
     
     // Clear point markers (they're no longer needed since we have the filled polygon)
     pointEntitiesRef.current.forEach(entity => {
@@ -204,8 +205,11 @@ function CesiumMap() {
 
   // Function to confirm polygon and open farm creation dialog
   const confirmPolygon = () => {
-    // Save completed polygon to state
-    setCompletedPolygons(prev => [...prev, { points: [], coordinates: tempCoordinates }]);
+    // Save completed polygon to state with the actual points
+    setCompletedPolygons(prev => [...prev, { 
+      points: polygonPoints, // Store the actual Cartesian3 points
+      coordinates: tempCoordinates 
+    }]);
     
     // Set pending polygon for farm creation
     setPendingPolygon(tempCoordinates);
@@ -235,13 +239,180 @@ function CesiumMap() {
   };
 
   // Function to handle successful farm creation
-  const handleFarmCreated = (farm: any) => {
+  const handleFarmCreated = async (farm: any) => {
     console.log('Farm created successfully:', farm);
     setPendingPolygon(null);
-    setToast({
-      message: `Farm "${farm.name}" created successfully!`,
-      type: 'success'
+    setCurrentFarmName(farm.name);
+    setCurrentFarmId(farm.id); // Store the farm ID
+    
+    // Start the new flow: zoom out, rotate, analyze, zoom in
+    await startAnalysisFlow(farm);
+  };
+
+  // Function to start the complete analysis flow
+  const startAnalysisFlow = async (farm: any) => {
+    if (!cesiumViewerRef.current) return;
+    
+    console.log('🎬 [DEBUG] Starting complete analysis flow for farm:', farm);
+    console.log('📊 [DEBUG] Current completed polygons:', completedPolygons);
+    console.log('📊 [DEBUG] Temp coordinates:', tempCoordinates);
+    
+    // Step 1: Zoom out to original globe view
+    console.log('🌍 [DEBUG] Step 1: Zooming out to original globe view...');
+    await zoomToOriginalView();
+    
+    // Step 2: Start slow globe rotation and analysis
+    console.log('🔄 [DEBUG] Step 2: Starting globe rotation and analysis...');
+    await startGlobeRotationWithAnalysis(farm.id);
+    
+    // Step 3: Zoom back in to the farm
+    console.log('📍 [DEBUG] Step 3: Zooming back in to farm...');
+    await zoomToFarm(farm);
+    
+    // Step 4: Show analyze button
+    console.log('🔍 [DEBUG] Step 4: Showing analyze button...');
+    setShowAnalyzeButton(true);
+    console.log('✅ [DEBUG] Analysis flow completed - button should be visible now');
+  };
+
+  // Function to zoom out to original globe view
+  const zoomToOriginalView = (): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!cesiumViewerRef.current) {
+        resolve();
+        return;
+      }
+      
+      const viewer = cesiumViewerRef.current;
+      
+      // Fly to a default view (similar to initial load)
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(0, 0, 20000000), // Default view
+        duration: 2.0,
+        complete: () => {
+          console.log('✅ [DEBUG] Zoomed out to original view');
+          resolve();
+        }
+      });
     });
+  };
+
+  // Function to start globe rotation with analysis
+  const startGlobeRotationWithAnalysis = async (farmId: string): Promise<void> => {
+    if (!cesiumViewerRef.current) return;
+    
+    const viewer = cesiumViewerRef.current;
+    console.log('🔄 [DEBUG] Starting rotation and analysis for farm ID:', farmId);
+    
+    // Start slow rotation
+    const startTime = Date.now();
+    const rotationDuration = 8000; // 8 seconds of rotation
+    
+    const rotateGlobe = () => {
+      const elapsed = Date.now() - startTime;
+      
+      if (elapsed < rotationDuration && viewer && viewer.camera) {
+        // Slow rotation around the globe - rotate around the Z axis
+        const currentPosition = viewer.camera.position.clone();
+        const currentHeading = viewer.camera.heading;
+        
+        // Set new heading for rotation
+        viewer.camera.setView({
+          destination: currentPosition,
+          orientation: {
+            heading: currentHeading + 0.02,
+            pitch: viewer.camera.pitch,
+            roll: viewer.camera.roll
+          }
+        });
+        
+        requestAnimationFrame(rotateGlobe);
+      }
+    };
+    
+    // Start rotation
+    rotateGlobe();
+    
+    // Simulate analysis time (you can replace this with actual API call)
+    console.log('🔍 [DEBUG] Starting analysis simulation...');
+    await new Promise(resolve => setTimeout(resolve, rotationDuration)); // Wait for rotation to complete
+    
+    console.log('✅ [DEBUG] Analysis simulation completed');
+  };
+
+  // Function to zoom back in to the farm
+  const zoomToFarm = (farmData: any): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!cesiumViewerRef.current) {
+        resolve();
+        return;
+      }
+      
+      const viewer = cesiumViewerRef.current;
+      
+      // Use the farm centroid if available, otherwise calculate from coordinates
+      let centerLat, centerLon;
+      
+      if (farmData.centroid) {
+        centerLat = farmData.centroid.lat;
+        centerLon = farmData.centroid.lon;
+      } else {
+        // Calculate center from tempCoordinates (the coordinates we just used to create the farm)
+        if (tempCoordinates.length > 0) {
+          centerLat = tempCoordinates.reduce((sum, coord) => sum + coord.lat, 0) / tempCoordinates.length;
+          centerLon = tempCoordinates.reduce((sum, coord) => sum + coord.lon, 0) / tempCoordinates.length;
+        } else {
+          console.error('❌ [DEBUG] No coordinates available for zoom');
+          resolve();
+          return;
+        }
+      }
+      
+      console.log('📍 [DEBUG] Zooming to coordinates:', { lat: centerLat, lon: centerLon });
+      
+      // Fly to the farm location
+      viewer.camera.flyTo({
+        destination: Cartesian3.fromDegrees(centerLon, centerLat, 5000), // 5km altitude
+        duration: 2.0,
+        complete: () => {
+          console.log('✅ [DEBUG] Zoomed in to farm location');
+          resolve();
+        }
+      });
+    });
+  };
+
+  // Function to handle analyze button click
+  const handleAnalyzeClick = async () => {
+    if (!currentFarmId) return;
+    
+    setIsAnalyzing(true);
+    setShowAnalyzeButton(false);
+    
+    try {
+      console.log('🚀 [DEBUG] Starting farm analysis...');
+      console.log('📋 [DEBUG] Farm name:', currentFarmName);
+      console.log('🌐 [DEBUG] Redirecting to dashboard...');
+      
+      // Redirect to dashboard with farm data
+      navigate('/', { 
+        state: { 
+          farmName: currentFarmName,
+          farmId: currentFarmId,
+          coordinates: completedPolygons[completedPolygons.length - 1]?.coordinates || [],
+          showAnalysis: true // Flag to show analysis data on dashboard
+        } 
+      });
+      
+    } catch (error: any) {
+      console.error('❌ [DEBUG] Error during analysis setup:', error);
+      setToast({
+        message: 'Failed to start analysis',
+        type: 'error'
+      });
+      setIsAnalyzing(false);
+      setShowAnalyzeButton(true);
+    }
   };
 
   // Function to handle farm creation errors
@@ -258,9 +429,6 @@ function CesiumMap() {
     
     setIsDrawingMode(false);
     setPolygonPoints([]);
-    
-    // Since we don't create polygons during drawing, no need to remove currentPolygonEntity
-    setCurrentPolygonEntity(null);
     
     // Clear point markers
     pointEntitiesRef.current.forEach(entity => {
@@ -285,8 +453,13 @@ function CesiumMap() {
     // Reset states
     setCompletedPolygons([]);
     setPolygonPoints([]);
-    setCurrentPolygonEntity(null);
     pointEntitiesRef.current = [];
+    
+    // Reset analysis states
+    setShowAnalyzeButton(false);
+    setIsAnalyzing(false);
+    setCurrentFarmName('');
+    setCurrentFarmId('');
     
     // Cancel any ongoing drawing
     if (isDrawingMode) {
@@ -513,6 +686,31 @@ function CesiumMap() {
             🗑️ Clear All ({completedPolygons.length})
           </button>
         )}
+
+        {/* Analyze Button */}
+        {showAnalyzeButton && (
+          <button 
+            onClick={handleAnalyzeClick}
+            disabled={isAnalyzing}
+            style={{
+              backgroundColor: "#28a745",
+              color: "white",
+              border: "none",
+              padding: "12px 20px",
+              borderRadius: "8px",
+              cursor: isAnalyzing ? "not-allowed" : "pointer",
+              fontSize: "16px",
+              fontWeight: "600",
+              boxShadow: "0 4px 12px rgba(40, 167, 69, 0.3)",
+              marginTop: "12px",
+              opacity: isAnalyzing ? 0.7 : 1,
+              transition: "all 0.3s ease",
+              animation: "pulse 2s infinite"
+            }}
+          >
+            {isAnalyzing ? "🔄 Analyzing..." : "🔍 Analyze Farm"}
+          </button>
+        )}
       </div>
 
       {/* Coordinates Display */}
@@ -623,6 +821,20 @@ function CesiumMap() {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { 
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+          }
+          50% { 
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(40, 167, 69, 0.5);
+          }
+        }
+      `}</style>
     </div>
   );
 }

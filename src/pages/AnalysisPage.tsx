@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { farmApi } from '../api/farms';
 import type { Farm, Analysis } from '../api/farms';
 import { Button } from '../components/ui/button';
@@ -7,6 +7,7 @@ import { Card } from '../components/ui/card';
 
 export const AnalysisPage: React.FC = () => {
   const { farm_id } = useParams<{ farm_id: string }>();
+  const location = useLocation();
   const [farm, setFarm] = useState<Farm | null>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [latestAnalysis, setLatestAnalysis] = useState<Analysis | null>(null);
@@ -14,8 +15,41 @@ export const AnalysisPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Check if we have navigation state from map page
+  const navigationState = location.state as {
+    farmName?: string;
+    farmId?: string;
+    coordinates?: Array<{lat: number, lon: number}>;
+  } | null;
+
   useEffect(() => {
     const loadData = async () => {
+      // If we have navigation state, use that data and start analysis
+      if (navigationState?.farmId) {
+        console.log('🚀 [DEBUG] Starting analysis from navigation state...');
+        console.log('📋 [DEBUG] Farm data from navigation:', navigationState);
+        
+        // Create a temporary farm object from navigation state
+        const tempFarm: Farm = {
+          id: navigationState.farmId,
+          name: navigationState.farmName || 'New Farm',
+          centroid: {
+            lat: navigationState.coordinates?.[0]?.lat || 0,
+            lon: navigationState.coordinates?.[0]?.lon || 0
+          },
+          area_m2: 0,
+          created_at: new Date().toISOString()
+        };
+        
+        setFarm(tempFarm);
+        setLoading(false);
+        
+        // Automatically start analysis
+        await handleRunAnalysis(navigationState.farmId);
+        return;
+      }
+
+      // Otherwise, load from URL params
       if (!farm_id) return;
 
       try {
@@ -44,18 +78,22 @@ export const AnalysisPage: React.FC = () => {
     };
 
     loadData();
-  }, [farm_id]);
+  }, [farm_id, navigationState]);
 
-  const handleRunAnalysis = async () => {
-    if (!farm_id) return;
+  const handleRunAnalysis = async (farmId?: string) => {
+    const targetFarmId = farmId || farm_id;
+    if (!targetFarmId) return;
 
     setAnalyzing(true);
     try {
-      const newAnalysis = await farmApi.analyzeFarm(farm_id);
+      console.log('🔍 [DEBUG] Running analysis for farm:', targetFarmId);
+      const newAnalysis = await farmApi.analyzeFarm(targetFarmId);
+      console.log('✅ [DEBUG] Analysis completed:', newAnalysis);
+      
       setAnalyses([newAnalysis, ...analyses]);
       setLatestAnalysis(newAnalysis);
     } catch (err) {
-      console.error('Analysis failed:', err);
+      console.error('❌ [DEBUG] Analysis failed:', err);
       setError('Failed to run analysis');
     } finally {
       setAnalyzing(false);
@@ -97,7 +135,7 @@ export const AnalysisPage: React.FC = () => {
                 <Button variant="outline">Back to Dashboard</Button>
               </Link>
               <Button 
-                onClick={handleRunAnalysis}
+                onClick={() => handleRunAnalysis()}
                 disabled={analyzing}
               >
                 {analyzing ? 'Analyzing...' : 'Run New Analysis'}
@@ -163,7 +201,7 @@ export const AnalysisPage: React.FC = () => {
                 <p className="text-gray-600 mb-6">
                   Run your first analysis to get AI insights about this farm.
                 </p>
-                <Button onClick={handleRunAnalysis} disabled={analyzing}>
+                <Button onClick={() => handleRunAnalysis()} disabled={analyzing}>
                   {analyzing ? 'Analyzing...' : 'Run First Analysis'}
                 </Button>
               </Card>
